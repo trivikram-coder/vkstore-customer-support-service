@@ -1,5 +1,8 @@
+const fetch = require("node-fetch");
 
-// 🔥 STEP 1: Extract intent + search + attribute using AI
+/* =========================================================
+   🔥 STEP 1: AI INTENT + ENTITY EXTRACTION (SMART)
+========================================================= */
 const extractSearchData = async (message) => {
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -14,24 +17,37 @@ const extractSearchData = async (message) => {
           {
             role: "system",
             content: `
-Extract structured data from user query.
+You are an intelligent intent detection system for an e-commerce platform.
 
 Return ONLY JSON:
 {
-  "intent": "PRODUCT | ORDER | CART | PAYMENT | GENERAL",
-  "search": "main product keyword",
-  "attribute": "price | rating | details | null"
+  "intent": "PRODUCT | CART | ORDER | PAYMENT | SUPPORT | GENERAL",
+  "search": "main keyword or null",
+  "attribute": "price | rating | details | null",
+  "issueType": "login | payment | cart | bug | ui | performance | null"
 }
 
+Rules:
+- If user asks about products → PRODUCT
+- If about cart → CART
+- If about orders → ORDER
+- If about payments → PAYMENT
+- If user has problem/issue → SUPPORT
+- Otherwise → GENERAL
+
 Examples:
+
 "show dell laptop rating" →
-{"intent":"PRODUCT","search":"dell laptop","attribute":"rating"}
+{"intent":"PRODUCT","search":"dell laptop","attribute":"rating","issueType":null}
 
-"show ipad details" →
-{"intent":"PRODUCT","search":"ipad","attribute":"details"}
+"my payment failed" →
+{"intent":"SUPPORT","search":null,"attribute":null,"issueType":"payment"}
 
-"what is price of iphone" →
-{"intent":"PRODUCT","search":"iphone","attribute":"price"}
+"app is slow" →
+{"intent":"SUPPORT","search":null,"attribute":null,"issueType":"performance"}
+
+"what is in my cart" →
+{"intent":"CART","search":null,"attribute":null,"issueType":null}
 `
           },
           {
@@ -49,13 +65,20 @@ Examples:
 
   } catch (error) {
     console.error("Extractor Error:", error.message);
-    return { intent: "GENERAL", search: "", attribute: null };
+    return {
+      intent: "GENERAL",
+      search: null,
+      attribute: null,
+      issueType: null
+    };
   }
 };
 
 
-// 🔥 STEP 2: Generate final AI response
-const callAI = async (message, contextData = "", attribute = null) => {
+/* =========================================================
+   🔥 STEP 2: MAIN AI RESPONSE ENGINE (SMART ASSISTANT)
+========================================================= */
+const callAI = async (message, contextData = "", attribute = null, issueType = null) => {
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
@@ -69,24 +92,38 @@ const callAI = async (message, contextData = "", attribute = null) => {
           {
             role: "system",
             content: `
-You are an e-commerce assistant.
-The app name is Vk store scalable reliable application like amazon flipkart and meesho,you can add your own words founder Vikram and built in 2025
+You are a smart AI assistant for VK Store (built by Vikram in 2025), similar to Amazon, Flipkart, Meesho.
+
+Your responsibilities:
+- Help users with products, cart, orders, payments
+- Solve user issues (login, payment failure, bugs, slow app)
+- Provide helpful guidance like real support agent
+
 STRICT RULES:
-- Use ONLY the provided context data.
-- NEVER say "no information" if context exists.
-- Do NOT use newline characters.
-- Output must be a single clean sentence.
-- If the data contains multiple values then order by numbers (1,2,3,..).
-Ex:Iphone,Samsung are there in cart then you must order like 1. Iphone and its details , 2. Samsung and its details
-SPECIAL RULE:
-- If attribute = rating → return ONLY rating.
-- If attribute = price → return ONLY price.
-- If attribute = details → return full details.
+- Use context data if available
+- If context exists → NEVER say "no information"
+- If no context → still help intelligently
+- No newline characters
+- Output must be a single clean sentence
+- If multiple items → number them (1,2,3)
+
+ATTRIBUTE RULES:
+- rating → only rating
+- price → only price
+- details → full info
+
+SUPPORT RULES:
+- login issue → suggest re-login, clear storage
+- payment issue → suggest retry, check balance
+- cart issue → suggest refresh, re-add items
+- bug → suggest refresh or contact support
+- performance → suggest network check
+
+Context:
+${contextData}
 
 Attribute: ${attribute}
-
-Context Data:
-${contextData}
+IssueType: ${issueType}
 `
           },
           {
@@ -100,19 +137,19 @@ ${contextData}
     const data = await response.json();
 
     if (!data?.choices) {
-      return "Sorry, I couldn't process your request.";
+      return "Sorry, something went wrong. Please try again.";
     }
 
     let reply = data.choices[0].message.content;
 
-    // 🔥 Clean output (remove \n)
+    // 🔥 Clean formatting
     reply = reply.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
 
     return reply;
 
   } catch (error) {
     console.error("AI Error:", error.message);
-    return "AI service failed. Try again later.";
+    return "AI service failed. Please try again later.";
   }
 };
 
