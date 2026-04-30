@@ -1,4 +1,3 @@
-const fetch = require("node-fetch");
 
 /* =========================================================
    🔥 STEP 1: AI INTENT + ENTITY EXTRACTION (SMART)
